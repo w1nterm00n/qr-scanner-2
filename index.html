@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR SCANNER</title>
+    <style>
+        #result{
+            max-width: 300px;
+            border: 1px solid green;
+            margin: 0 auto;
+            word-break: break-all;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome to QR SCANNER</h1>
+    <select id="camera-select"></select>
+    <div id="reader" style="width: 300px"></div>
+    <div id="time"></div>
+    <div id="result"></div>
+
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script>
+        let html5QrCode;   // глобально
+        let cameraId;      // глобально
+    
+        function onScanSuccess(decodedText, decodedResult) {
+            let date = new Date();
+            let timeStr = date.toLocaleTimeString('ru-RU', { hour12: false });
+            document.getElementById('time').textContent = `Time: ${timeStr} : QR sent`;
+    
+            // Останавливаем сканер на 2 секунды
+            html5QrCode.stop().then(() => {
+                setTimeout(() => {
+                    document.getElementById('time').textContent = '';
+                    // Снова запускаем сканер
+                    html5QrCode.start(
+                        cameraId,
+                        { fps: 10, qrbox: 250 },
+                        onScanSuccess
+                    );
+                }, 2000);
+            });
+    
+            fetch(`http://192.168.50.183:80/run-parsing-check?invoice_link=${encodeURIComponent(decodedText)}`, {
+                method: 'GET',
+                // headers: {
+                //     'invoice-link': encodeURIComponent(decodedText)
+                // }
+            })
+            .then(response => {
+                switch (response.status) {
+                    case 200:
+                        document.getElementById('result').innerHTML += `<div style="color:green;">Success</div>`;
+                        break;
+                    default:
+                        document.getElementById('result').innerHTML += `<div style="color:red;">Failed</div>`;
+                        break;
+                }
+                return response.text();
+            })
+            // .then(data => {
+            //     console.log("Ответ сервера:", data);
+            //     document.getElementById('result').textContent += "\nОтвет сервера:\n" + JSON.stringify(data, null, 2);
+            // })
+            .catch(error => {
+                console.error("Ошибка запроса:", error);
+                document.getElementById('result').textContent += "\nОшибка запроса: " + error;
+            });
+        }
+    
+        // Получаем камеры и запускаем сканер
+
+    Html5Qrcode.getCameras().then(cameras => {
+        if (cameras && cameras.length) {
+            const cameraSelect = document.getElementById('camera-select'); 
+            cameraSelect.innerHTML = ""; 
+            cameras.forEach((cam, idx) => {
+                const option = document.createElement('option'); 
+                option.value = cam.id; 
+                option.text = cam.label || `Камера ${idx+1}`; 
+                cameraSelect.appendChild(option); 
+            }); 
+
+            cameraId = cameras[0].id; 
+            html5QrCode = new Html5Qrcode("reader"); 
+
+            html5QrCode.start( 
+                cameraId, 
+                { fps: 10, qrbox: 250 }, 
+                onScanSuccess 
+            ); 
+
+            cameraSelect.addEventListener('change', function() {
+                cameraId = this.value; 
+                html5QrCode.stop().then(() => { 
+                    html5QrCode.start( 
+                        cameraId, 
+                        { fps: 10, qrbox: 250 }, 
+                        onScanSuccess 
+                    ); 
+                }); 
+            }); 
+
+        } else {
+            document.getElementById('result').textContent = "Нет доступных камер";
+        }
+    }).catch(err => {
+        document.getElementById('result').textContent = "Ошибка доступа к камере: " + err;
+    });
+
+
+
+
+    </script>
+    
+</body>
+</html>
